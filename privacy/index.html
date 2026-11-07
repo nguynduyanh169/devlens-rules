@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DevLens Privacy Policy</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1b1b1f; --muted: #5b5b66; --bg: #ffffff; --line: #e3e1ec; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e4e1e9; --muted: #a9a7b3; --bg: #111318; --line: #2c2c34; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h2 { font-size: 19px; margin: 32px 0 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+  p.meta { color: var(--muted); margin: 0 0 24px; }
+  li { margin: 4px 0; }
+  code { font-family: ui-monospace, "JetBrains Mono", monospace; font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+<h1>DevLens Privacy Policy</h1>
+<p class="meta">Effective date: November 7, 2026</p>
+
+<p>DevLens is an Android app that inspects installed apps and app files (<code>.apk</code>, <code>.aab</code>, <code>.apks</code>, <code>.xapk</code>) for developers and QA. All analysis runs on your device. DevLens has no backend server, no user accounts, no ads and no analytics.</p>
+
+<h2>What DevLens reads on your device</h2>
+<ul>
+  <li><strong>The list of installed apps and their APK files.</strong> DevLens uses the <code>QUERY_ALL_PACKAGES</code> permission to see every installed app, because inspecting installed apps is its core feature. It reads each app's package name, version, label, icon and APK contents (native libraries, manifest, DEX headers) to detect frameworks, SDKs, build settings and 16 KB page size compatibility.</li>
+  <li><strong>Files you choose.</strong> When you open a file with the system file picker, DevLens reads that file to analyze it. It does not copy the file and cannot open other files without your choice.</li>
+</ul>
+
+<h2>What DevLens stores</h2>
+<ul>
+  <li>Scan results of installed apps, so the list opens quickly next time.</li>
+  <li>Up to 20 recently opened files: the file name, a SHA-256 fingerprint of the file and its scan results. The file itself is not stored.</li>
+  <li>One setting: whether rules update automatically.</li>
+</ul>
+<p>This data stays in the app's private storage. Scan results and recent files are excluded from Android cloud backup and device-to-device transfer. You can delete the scan results of installed apps with <em>Clear Local Cache</em> in Settings; uninstalling DevLens deletes everything.</p>
+
+<h2>Network use</h2>
+<p>DevLens makes one kind of network request: it downloads updated SDK detection rules (a small database file) from a public GitHub repository, <code>raw.githubusercontent.com/nguynduyanh169/devlens-rules</code>. This happens at most once a day on an unmetered network when automatic updates are on, or when you tap <em>Update</em>. The request contains no information about you, your device or your apps. GitHub may log technical data such as your IP address, as described in the GitHub Privacy Statement.</p>
+<p>Links such as the Android developer documentation open in your browser; DevLens itself sends no request for them.</p>
+
+<h2>What DevLens does not do</h2>
+<ul>
+  <li>It does not collect, transmit, sell or share personal data or the list of your apps.</li>
+  <li>It contains no advertising, analytics or crash-reporting SDKs.</li>
+  <li>It does not require an account.</li>
+</ul>
+
+<h2>Children</h2>
+<p>DevLens is a developer tool and is not directed to children.</p>
+
+<h2>Changes</h2>
+<p>If a future version adds features that change this policy, such as in-app purchases handled by Google Play, this page will be updated before that version is released, and the effective date above will change.</p>
+
+<h2>Contact</h2>
+<p>Questions about this policy: <a href="mailto:anhnd16091998@gmail.com">anhnd16091998@gmail.com</a></p>
+</main>
+</body>
+</html>
