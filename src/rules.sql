@@ -5,8 +5,8 @@ BEGIN;
 
 INSERT INTO meta (key, value) VALUES
   ('schema_version', '1'),
-  ('version', '4'),
-  ('published_at', '2026-11-10T06:52:47Z');
+  ('version', '5'),
+  ('published_at', '2026-11-10T07:36:54Z');
 
 INSERT INTO rules (id, position, label, kind, category, vendor, description, url, show_as_filter) VALUES
   ('flutter', 1, 'Flutter', 'FRAMEWORK', NULL, NULL, NULL, NULL, 1),
