@@ -13,6 +13,7 @@ SEED_SQL = (
 H1 = "a" * 32
 H2 = "b" * 32
 HEADER_LINE = "dart_version,flutter_version,release_date,hash\n"
+SEED = os.path.join(os.path.dirname(__file__), "fixtures", "seed-ledger.csv")
 
 
 def row(dart, flutter, date="2026-01-01", h=H1):
@@ -34,12 +35,16 @@ class LedgerTest(unittest.TestCase):
         return path
 
     def test_seed_ledger_is_valid(self):
-        rows = read_ledger("src/dart-snapshots.csv")
+        rows = read_ledger(SEED)
         self.assertEqual(3, len(rows))
         self.assertEqual(LedgerRow("3.6.2", "3.27.4", "2025-02-05", "f956f595844a2f845a55707faaaa51e4"), rows[0])
 
     def test_to_sql_seed(self):
-        self.assertEqual(SEED_SQL, to_sql(read_ledger("src/dart-snapshots.csv")))
+        self.assertEqual(SEED_SQL, to_sql(read_ledger(SEED)))
+
+    def test_live_ledger_is_valid(self):
+        # The live ledger grows with every merged PR: check that it reads and converts, never its content.
+        to_sql(read_ledger("src/dart-snapshots.csv"))
 
     def test_to_sql_merges_same_hash_same_minor(self):
         sql = to_sql([row("3.13.0", "3.47.0"), row("3.13.4", "3.47.5")])
