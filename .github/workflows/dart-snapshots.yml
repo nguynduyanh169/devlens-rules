@@ -1,0 +1,197 @@
+# Daily: builds every Flutter stable Dart SDK version that src/dart-snapshots.csv does not have yet, reads its Dart
+# snapshot hash, and opens (or updates) one PR on auto/dart-snapshots with the ledger, the bumped meta and the rebuilt
+# v1/ files. Merging that PR publishes the rules. See README.md, "dart-snapshot".
+name: Dart snapshots
+
+on:
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: dart-snapshots
+  cancel-in-progress: false
+
+env:
+  RELEASES_URL: https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json
+  PR_BRANCH: auto/dart-snapshots
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: write # keepalive: re-enable this workflow so GitHub does not disable the schedule after 60 quiet days
+      pull-requests: read
+    outputs:
+      action: ${{ steps.plan.outputs.action }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      build_count: ${{ steps.plan.outputs.build_count }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Unit tests
+        run: python3 -m unittest discover -s tools/tests -t .
+
+      - name: Keep the schedule alive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: gh api -X PUT "repos/$REPO/actions/workflows/dart-snapshots.yml/enable"
+
+      - name: Download the Flutter release list
+        run: curl -fsSL --retry 3 -o "$RUNNER_TEMP/releases.json" "$RELEASES_URL"
+
+      - name: Read the PR branch
+        id: branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          on_main=false
+          if git ls-remote --exit-code --heads origin "$PR_BRANCH" > /dev/null; then
+            git fetch --no-tags origin "$PR_BRANCH"
+            git show FETCH_HEAD:src/dart-snapshots.csv > "$RUNNER_TEMP/branch.csv"
+            if [ "$(git rev-parse FETCH_HEAD^)" = "$(git rev-parse HEAD)" ]; then
+              on_main=true
+            fi
+          fi
+          open="$(gh pr list --repo "$REPO" --head "$PR_BRANCH" --state open --json number --jq length)"
+          pr_open=false
+          if [ "$open" -gt 0 ]; then
+            pr_open=true
+          fi
+          echo "on_main=$on_main" >> "$GITHUB_OUTPUT"
+          echo "pr_open=$pr_open" >> "$GITHUB_OUTPUT"
+
+      - name: Plan
+        id: plan
+        env:
+          ON_MAIN: ${{ steps.branch.outputs.on_main }}
+          PR_OPEN: ${{ steps.branch.outputs.pr_open }}
+        run: |
+          mkdir -p plan-out
+          branch_args=()
+          if [ -f "$RUNNER_TEMP/branch.csv" ]; then
+            cp "$RUNNER_TEMP/branch.csv" plan-out/branch.csv
+            branch_args=(--branch-ledger plan-out/branch.csv)
+          fi
+          python3 -m tools.plan --releases "$RUNNER_TEMP/releases.json" --ledger src/dart-snapshots.csv \
+            "${branch_args[@]}" --branch-on-main "$ON_MAIN" --pr-open "$PR_OPEN" --out plan-out/plan.json
+          echo "action=$(jq -r .action plan-out/plan.json)" >> "$GITHUB_OUTPUT"
+          echo "matrix=$(jq -c '{include: .builds}' plan-out/plan.json)" >> "$GITHUB_OUTPUT"
+          echo "build_count=$(jq '.builds | length' plan-out/plan.json)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: plan
+          path: plan-out/
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.action == 'publish' && needs.plan.outputs.build_count != '0'
+    name: build Flutter ${{ matrix.flutter_version }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Build and read the hash
+        env:
+          DART_VERSION: ${{ matrix.dart_version }}
+          FLUTTER_VERSION: ${{ matrix.flutter_version }}
+          RELEASE_DATE: ${{ matrix.release_date }}
+          ARCHIVE_URL: ${{ matrix.archive_url }}
+          SHA256: ${{ matrix.sha256 }}
+          RESULT_FILE: results/${{ strategy.job-index }}.json
+        run: bash tools/build_one.sh
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: result-${{ strategy.job-index }}
+          path: results/
+          if-no-files-found: ignore
+
+  publish-pr:
+    needs: [plan, build]
+    if: always() && needs.plan.result == 'success' && needs.plan.outputs.action == 'publish'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: plan
+          path: ${{ runner.temp }}/plan
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: needs.plan.outputs.build_count != '0'
+        with:
+          pattern: result-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/results
+
+      - name: Merge the results
+        id: apply
+        run: |
+          mkdir -p "$RUNNER_TEMP/results"
+          branch_args=()
+          if [ -f "$RUNNER_TEMP/plan/branch.csv" ]; then
+            branch_args=(--branch-ledger "$RUNNER_TEMP/plan/branch.csv")
+          fi
+          python3 -m tools.apply --plan "$RUNNER_TEMP/plan/plan.json" --results "$RUNNER_TEMP/results" \
+            --ledger src/dart-snapshots.csv "${branch_args[@]}" --rules src/rules.sql \
+            --now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --out-title "$RUNNER_TEMP/title.txt" \
+            --out-body "$RUNNER_TEMP/body.md" --out-status "$RUNNER_TEMP/status.json"
+          echo "changed=$(jq -r .changed "$RUNNER_TEMP/status.json")" >> "$GITHUB_OUTPUT"
+          echo "has_errors=$(jq -r .has_errors "$RUNNER_TEMP/status.json")" >> "$GITHUB_OUTPUT"
+          echo "title=$(cat "$RUNNER_TEMP/title.txt")" >> "$GITHUB_OUTPUT"
+
+      - name: Build the rules db
+        if: steps.apply.outputs.changed == 'true'
+        run: |
+          command -v sqlite3 > /dev/null || { sudo apt-get update && sudo apt-get install -y sqlite3; }
+          bash build.sh
+
+      - uses: peter-evans/create-pull-request@15733dbdfeedb4f7fdb73d13c6f5ac83b710fab8 # v8.1.2
+        if: steps.apply.outputs.changed == 'true'
+        with:
+          branch: auto/dart-snapshots
+          base: main
+          title: ${{ steps.apply.outputs.title }}
+          body-path: ${{ runner.temp }}/body.md
+          commit-message: ${{ steps.apply.outputs.title }}
+          add-paths: |
+            src/dart-snapshots.csv
+            src/rules.sql
+            v1/
+
+      - name: Fail the run on build errors or hash conflicts
+        if: steps.apply.outputs.has_errors == 'true'
+        run: |
+          echo "Some builds failed or their hash conflicts with another Flutter minor: see the PR body and the build jobs." >&2
+          exit 1
