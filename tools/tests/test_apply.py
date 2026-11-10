@@ -67,6 +67,14 @@ class MergeTest(unittest.TestCase):
         outcome = merge(SEED, [], [ok("3.13.7", "3.47.8", "2026-10-23", C), ok("3.6.0", "3.27.0", "2024-12-11", D)])
         self.assertEqual(["3.6.0", "3.6.2", "3.7.2", "3.8.1", "3.13.7"], [r.dart_version for r in outcome.ledger])
 
+    def test_merge_skips_dart_versions_already_on_main(self):
+        # The PR was merged while this run was building: main already holds the reused row and a result.
+        row = LedgerRow("3.13.7", "3.47.8", "2026-10-23", C)
+        main_ledger = SEED + [row]
+        outcome = merge(main_ledger, [row], [ok("3.13.7", "3.47.8", "2026-10-23", C), ok("3.13.5", "3.47.6", "2026-10-01", C)])
+        self.assertEqual([Added(LedgerRow("3.13.5", "3.47.6", "2026-10-01", C), False)], outcome.added)
+        self.assertEqual(1, [r.dart_version for r in outcome.ledger].count("3.13.7"))
+
     def test_merge_reports_failed(self):
         bad = failed("3.13.5", "3.47.6", "2026-10-01")
         outcome = merge(SEED, [], [bad])
@@ -183,6 +191,21 @@ class CliTest(unittest.TestCase):
             self.assertEqual("Rules v4: Dart snapshot hashes for Flutter 3.47", f.read().strip())
         with open(self.path("body.md"), encoding="utf-8") as f:
             self.assertIn("flutter build apk failed", f.read())
+
+    def test_cli_reports_failures_and_conflicts_on_stderr(self):
+        write_ledger(self.ledger, SEED + [LedgerRow("3.12.2", "3.44.2", "2026-06-11", D)])
+        self.write_json("results/0.json", {"dart_version": "3.13.7", "flutter_version": "3.47.8",
+                                           "release_date": "2026-10-23", "status": "ok", "hash": D})
+        self.write_json("results/1.json", {"dart_version": "3.13.5", "flutter_version": "3.47.6",
+                                           "release_date": "2026-10-01", "status": "failed",
+                                           "error": "flutter build apk failed"})
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            status = self.run_cli([build("3.13.7", "3.47.8", "2026-10-23"), build("3.13.5", "3.47.6", "2026-10-01")])
+        self.assertTrue(status["has_errors"])
+        lines = err.getvalue().splitlines()
+        self.assertIn("apply: build failed: Flutter 3.47.6 (Dart 3.13.5): flutter build apk failed", lines)
+        self.assertIn(f"apply: hash conflict: Flutter 3.47.8 (Dart 3.13.7): {D} already belongs to 3.44", lines)
 
     def test_cli_all_failed_changes_nothing(self):
         before = (self.read_bytes(self.ledger), self.read_bytes(self.rules))

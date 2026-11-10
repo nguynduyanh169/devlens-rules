@@ -167,6 +167,8 @@ jobs:
             --ledger src/dart-snapshots.csv "${branch_args[@]}" --rules src/rules.sql \
             --now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --out-title "$RUNNER_TEMP/title.txt" \
             --out-body "$RUNNER_TEMP/body.md" --out-status "$RUNNER_TEMP/status.json"
+          # Always in the run summary: when the PR is not updated, this is the only place a failure or conflict shows.
+          cat "$RUNNER_TEMP/body.md" >> "$GITHUB_STEP_SUMMARY"
           echo "changed=$(jq -r .changed "$RUNNER_TEMP/status.json")" >> "$GITHUB_OUTPUT"
           echo "has_errors=$(jq -r .has_errors "$RUNNER_TEMP/status.json")" >> "$GITHUB_OUTPUT"
           echo "title=$(cat "$RUNNER_TEMP/title.txt")" >> "$GITHUB_OUTPUT"
@@ -193,5 +195,5 @@ jobs:
       - name: Fail the run on build errors or hash conflicts
         if: steps.apply.outputs.has_errors == 'true'
         run: |
-          echo "Some builds failed or their hash conflicts with another Flutter minor: see the PR body and the build jobs." >&2
+          echo "Some builds failed or their hash conflicts with another Flutter minor: see this run's summary and the build jobs." >&2
           exit 1

@@ -75,11 +75,16 @@ def read_results(results_dir: str, builds: list[dict]) -> list[BuildResult]:
 
 def merge(main_ledger: list[LedgerRow], reused: list[LedgerRow], results: list[BuildResult]) -> Outcome:
     minors = {r.hash: minor_of(r.flutter_version) for r in main_ledger if r.hash}
+    # A Dart version main already has is skipped: main can move while the builds run (a merged PR).
+    seen = {r.dart_version for r in main_ledger}
     candidates = list(reused) + [LedgerRow(r.dart_version, r.flutter_version, r.release_date, r.hash)
                                  for r in results if r.status == "ok"]
     added: list[Added] = []
     conflicts: list[Conflict] = []
     for row in candidates:
+        if row.dart_version in seen:
+            continue
+        seen.add(row.dart_version)
         minor = minor_of(row.flutter_version)
         known = minors.get(row.hash)
         if known is not None and known != minor:
@@ -155,6 +160,11 @@ def main(argv: list[str]) -> int:
         f.write(pr_title(outcome, version) + "\n")
     with open(args.out_body, "w", encoding="utf-8") as f:
         f.write(pr_body(outcome))
+    for r in outcome.failed:
+        print(f"apply: build failed: Flutter {r.flutter_version} (Dart {r.dart_version}): {r.error}", file=sys.stderr)
+    for c in outcome.conflicts:
+        print(f"apply: hash conflict: Flutter {c.row.flutter_version} (Dart {c.row.dart_version}): {c.row.hash} "
+              f"already belongs to {c.other_minor}", file=sys.stderr)
     status = {"changed": changed, "has_errors": bool(outcome.failed or outcome.conflicts), "version": version}
     with open(args.out_status, "w", encoding="utf-8") as f:
         json.dump(status, f)
