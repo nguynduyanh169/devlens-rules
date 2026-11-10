@@ -52,7 +52,9 @@ def parse_releases(doc: object) -> list[Release]:
     if not isinstance(doc, dict) or not isinstance(doc.get("base_url"), str) or not isinstance(doc.get("releases"), list):
         raise ReleasesError("releases JSON must be an object with a string base_url and a releases list")
     base_url = doc["base_url"].rstrip("/")
-    kept: list[Release] = []
+    # Keyed by archive URL: a release re-uploaded under the same path (Flutter 3.13.3 is listed twice) leaves only the
+    # last upload there, so only the entry with the latest release_date has the sha256 of that file.
+    by_archive: dict[str, tuple[str, Release]] = {}
     for entry in doc["releases"]:
         if not isinstance(entry, dict):
             raise ReleasesError("every release must be an object")
@@ -65,12 +67,15 @@ def parse_releases(doc: object) -> list[Release]:
         if not isinstance(dart_version, str) or not dart_version.strip():
             print(f"plan: skipping Flutter {version}: no dart_sdk_version", file=sys.stderr)
             continue
-        release_date = _text(entry, "release_date")[:10]
+        released_at = _text(entry, "release_date")
+        release_date = released_at[:10]
         if not _DATE.fullmatch(release_date):
             raise ReleasesError(f"release {version}: release_date must start with YYYY-MM-DD")
-        kept.append(Release(version, dart_version, release_date,
-                            f"{base_url}/{_text(entry, 'archive')}", _text(entry, "sha256")))
-    return kept
+        archive_url = f"{base_url}/{_text(entry, 'archive')}"
+        release = Release(version, dart_version, release_date, archive_url, _text(entry, "sha256"))
+        if archive_url not in by_archive or released_at > by_archive[archive_url][0]:
+            by_archive[archive_url] = (released_at, release)
+    return [release for _, release in by_archive.values()]
 
 
 def earliest_per_dart(releases: list[Release]) -> dict[str, Release]:
