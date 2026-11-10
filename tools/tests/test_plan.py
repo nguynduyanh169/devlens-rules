@@ -49,6 +49,19 @@ class ParseTest(unittest.TestCase):
         self.assertEqual("2026-10-23", r.release_date)
         self.assertEqual("3.13.7", r.dart_version)
 
+    def test_reuploaded_archive_keeps_the_latest_entry(self):
+        # Flutter 3.13.3 is listed twice with one archive path: the file there is the later upload, so only the later
+        # entry's sha256 matches it.
+        doc = load_doc()
+        earlier = dict(next(e for e in doc["releases"] if e["version"] == "3.47.8"))
+        earlier.update(release_date="2026-10-20T10:00:00.000000Z", sha256="0" * 64, hash="8" * 40)
+        doc["releases"].append(earlier)
+        with contextlib.redirect_stderr(io.StringIO()):
+            kept = [r for r in parse_releases(doc) if r.version == "3.47.8"]
+        self.assertEqual(1, len(kept))
+        self.assertEqual("47847847847847847847847847847847847847847847847847847847847847aa", kept[0].sha256)
+        self.assertEqual("2026-10-23", kept[0].release_date)
+
     def test_rejects_malformed_document(self):
         doc = load_doc()
         del doc["releases"][0]["version"]
