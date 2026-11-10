@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from tools.ledger import LedgerError, LedgerRow, read_ledger, version_key
 
-MIN_FLUTTER = (3, 27)
+MIN_FLUTTER = (3, 0)
 
 _STABLE_VERSION = re.compile(r"\d+\.\d+\.\d+")
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")

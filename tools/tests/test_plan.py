@@ -18,6 +18,8 @@ BUILD_BETA = "3.10.0 (build 3.10.0-290.4.beta)"
 ROW_3_10_BETA = LedgerRow(BUILD_BETA, "3.38.0", "2025-11-12", "a" * 32)
 ROW_3_10 = LedgerRow("3.10.0", "3.38.1", "2025-11-13", "b" * 32)
 ROW_3_13_7 = LedgerRow("3.13.7", "3.47.8", "2026-10-23", "c" * 32)
+ROW_3_5_4 = LedgerRow("3.5.4", "3.24.5", "2024-11-13", "e" * 32)
+ALL_PENDING = [ROW_3_5_4, ROW_3_10_BETA, ROW_3_10, ROW_3_13_7]
 
 
 def load_doc():
@@ -31,8 +33,8 @@ def releases():
 
 
 class ParseTest(unittest.TestCase):
-    def test_keeps_stable_from_3_27(self):
-        self.assertEqual({"3.47.9", "3.47.8", "3.38.0", "3.38.1", "3.27.4"}, {r.version for r in releases()})
+    def test_keeps_stable_from_3_0(self):
+        self.assertEqual({"3.47.9", "3.47.8", "3.38.0", "3.38.1", "3.27.4", "3.24.5"}, {r.version for r in releases()})
 
     def test_skips_release_without_dart_version(self):
         err = io.StringIO()
@@ -69,39 +71,39 @@ class DecideTest(unittest.TestCase):
     def test_pending_without_branch_builds_all(self):
         d = self.decide()
         self.assertEqual("publish", d.action)
-        self.assertEqual(["3.38.0", "3.38.1", "3.47.8"], [r.version for r in d.builds])
+        self.assertEqual(["3.24.5", "3.38.0", "3.38.1", "3.47.8"], [r.version for r in d.builds])
         self.assertEqual([], d.reused)
 
     def test_no_pending_stops(self):
-        d = self.decide(main_ledger=SEED + [ROW_3_10_BETA, ROW_3_10, ROW_3_13_7])
+        d = self.decide(main_ledger=SEED + ALL_PENDING)
         self.assertEqual(Decision("stop", [], []), d)
 
     def test_skipped_row_is_not_pending(self):
         skipped = LedgerRow("3.13.7", "3.47.8", "2026-10-23", "")
         d = self.decide(main_ledger=SEED + [skipped])
-        self.assertEqual(["3.38.0", "3.38.1"], [r.version for r in d.builds])
+        self.assertEqual(["3.24.5", "3.38.0", "3.38.1"], [r.version for r in d.builds])
 
     def test_reuses_hashes_from_branch(self):
         d = self.decide(branch=SEED + [ROW_3_13_7])
         self.assertEqual("publish", d.action)
         self.assertEqual([ROW_3_13_7], d.reused)
-        self.assertEqual(["3.38.0", "3.38.1"], [r.version for r in d.builds])
+        self.assertEqual(["3.24.5", "3.38.0", "3.38.1"], [r.version for r in d.builds])
 
     def test_everything_on_branch_and_pr_open_stops(self):
-        d = self.decide(branch=SEED + [ROW_3_10_BETA, ROW_3_10, ROW_3_13_7], on_main=True, pr_open=True)
+        d = self.decide(branch=SEED + ALL_PENDING, on_main=True, pr_open=True)
         self.assertEqual("stop", d.action)
 
     def test_closed_pr_republishes(self):
-        d = self.decide(branch=SEED + [ROW_3_10_BETA, ROW_3_10, ROW_3_13_7], on_main=True, pr_open=False)
+        d = self.decide(branch=SEED + ALL_PENDING, on_main=True, pr_open=False)
         self.assertEqual("publish", d.action)
         self.assertEqual([], d.builds)
-        self.assertEqual(3, len(d.reused))
+        self.assertEqual(4, len(d.reused))
 
     def test_stale_branch_republishes(self):
-        d = self.decide(branch=SEED + [ROW_3_10_BETA, ROW_3_10, ROW_3_13_7], on_main=False, pr_open=True)
+        d = self.decide(branch=SEED + ALL_PENDING, on_main=False, pr_open=True)
         self.assertEqual("publish", d.action)
         self.assertEqual([], d.builds)
-        self.assertEqual(3, len(d.reused))
+        self.assertEqual(4, len(d.reused))
 
 
 class CliTest(unittest.TestCase):
@@ -126,7 +128,7 @@ class CliTest(unittest.TestCase):
                           "archive_url": "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/"
                                          "flutter_linux_3.38.0-stable.tar.xz",
                           "sha256": "38038038038038038038038038038038038038038038038038038038038038aa"},
-                         plan["builds"][0])
+                         next(b for b in plan["builds"] if b["dart_version"] == BUILD_BETA))
         self.assertEqual([{"dart_version": "3.13.7", "flutter_version": "3.47.8", "release_date": "2026-10-23",
                            "hash": "c" * 32}], plan["reused"])
 

@@ -63,7 +63,7 @@ The first three rows (Flutter 3.27.4, 3.29.3, 3.32.8) were checked by hand again
 
 **The action** (`dart-snapshots.yml`, daily at 03:23 UTC, or *Run workflow* in the Actions tab):
 
-1. Reads `releases_linux.json` and keeps the stable releases from Flutter 3.27 on that name a Dart SDK. For each Dart SDK version not in the ledger on `main`, it picks the earliest Flutter release that shipped it.
+1. Reads `releases_linux.json` and keeps the stable releases from Flutter 3.0 on (`MIN_FLUTTER` in `tools/plan.py`) that name a Dart SDK. For each Dart SDK version not in the ledger on `main`, it picks the earliest Flutter release that shipped it.
 2. Builds a hello-world app with that release (`flutter build apk --release --target-platform android-arm64`, JDK 17), reads the hash from `lib/arm64-v8a/libapp.so`, and checks that `lib/arm64-v8a/libflutter.so` of the same APK holds the same string.
 3. Adds the rows to the ledger, raises `version`, sets `published_at`, runs `build.sh`, and opens or updates the PR on `auto/dart-snapshots`. The PR body lists every new row, failed build and conflicting hash.
 
